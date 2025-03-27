@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" class="overflow-hidden">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fake Insects Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body, button, .cursor-pointer {
+        cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='53' height='64' viewport='0 0 100 100' style='fill:black;font-size:32px;'><text y='50%'>🐛</text></svg>"), auto !important;
+      }
+    </style>
+  </head>
+  <body>
+    <audio id="coin-flip-sound" src="coin_flip.mp3"></audio>
+    <audio id="wiggle-sound" src="wiggle.mp3"></audio>
+    <audio id="countdown-sound" src="countdown.mp3"></audio>
+    <div
+      class="container mx-auto grid h-dvh max-w-4xl grid-rows-[40px,1fr,1fr] gap-1 overflow-hidden border-x bg-white pb-2 md:grid-cols-2 md:grid-rows-[40px,1fr]"
+    >
+      <div
+        class="flex items-center bg-gray-100 px-3 font-bold md:col-span-2"
+      >
+        <h1 class="sm:text-xl">
+          <span class="sm:text-2xl">🐞</span> Fake Insects <span class="bg-gray-200 text-sm text-gray-500 px-1 py-0.5 rounded ml-1 align-text-bottom">v0.0</span>
+        </h1>
+        <div class="flex items-center gap-1 max-sm:text-sm sm:gap-1.5 ml-auto sm:ml-12">
+          <p class="rounded bg-black px-1.5 text-white">
+            <span class="font-normal">TIME LEFT:</span> <span id="time-left">25</span>s
+          </p>
+          <p class="rounded bg-black px-1.5 text-white">
+            <span class="font-normal">SCORE:</span> <span id="score">0</span>
+          </p>
+        </div>
+      </div>
+      <div class="overflow-hidden cursor-pointer" id="image1">
+        <img
+          class="size-full object-contain hidden-if-no-src"
+          src=""
+          alt="Insect 1"
+        />
+      </div>
+      <div class="overflow-hidden cursor-pointer" id="image2">
+        <img
+          class="size-full object-contain hidden-if-no-src"
+          src=""
+          alt="Insect 2"
+        />
+      </div>
+    </div>
+
+    <!-- only show at the start -->
+    <div
+      id="start-overlay"
+      class="absolute inset-0 grid place-items-center bg-black/50 p-6"
+    >
+      <div
+        class="flex max-w-xl flex-col gap-6 text-balance rounded-xl bg-white p-12 text-center shadow-2xl"
+      >
+        <div class="text-5xl">🐞</div>
+        <div>
+          <p class="mb-1 text-xl">
+            Find the
+            <b class="font-semibold"
+              >fake insect (AI generated) and click on it</b
+            >
+            to win a point!
+          </p>
+          <p class="text-lg text-gray-400">
+            You have 25 seconds to make as many points as possible.
+          </p>
+        </div>
+
+        <button
+          id="start-button"
+          class="flex h-12 items-center justify-center rounded-xl bg-green-500 px-6 font-semibold text-white hover:bg-green-600"
+        >
+          Start playing
+        </button>
+      </div>
+    </div>
+
+    <!-- only show after the player loses -->
+    <div
+      id="game-over-overlay"
+      class="absolute inset-0 grid hidden place-items-center bg-black/50 p-6"
+    >
+      <div
+        class="flex flex-col gap-6 rounded-xl bg-white p-12 text-center shadow-2xl"
+      >
+        <p id="game-over-reason" class="font-semibold text-lg"></p>
+        <div class="text-5xl">🐞</div>
+        <div>
+          <p class="mb-2 text-4xl font-bold">
+            Your score:
+            <span id="final-score" class="rounded-xl bg-black px-2 text-white">0</span>
+          </p>
+          <p id="game-over-message" class="text-lg text-gray-500">
+            You found 0 fake insects in 25 seconds.
+          </p>
+          <p id="performance-percentage" class="text-md text-gray-500">You've outperformed 0% of players.</p>
+          <p class="text-md text-gray-500 mt-1">
+            Your Highscore: 
+            <span id="highscore" class="rounded-md font-bold bg-black px-1.5 text-white">0</span>
+          </p>
+        </div>
+
+        <button
+          id="try-again-button"
+          class="flex h-12 items-center justify-center rounded-xl bg-black px-6 font-semibold text-white hover:bg-gray-700"
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+  </body>
+  <script>
+    const startOverlay = document.getElementById('start-overlay');
+    const gameOverOverlay = document.getElementById('game-over-overlay');
+    const startButton = document.getElementById('start-button');
+    const tryAgainButton = document.getElementById('try-again-button');
+    const timeLeftElement = document.getElementById('time-left');
+    const scoreElement = document.getElementById('score');
+    const finalScoreElement = document.getElementById('final-score');
+    const gameOverMessageElement = document.getElementById('game-over-message');
+    const image1 = document.getElementById('image1');
+    const image2 = document.getElementById('image2');
+    const highscoreElement = document.getElementById('highscore');
+
+    let score = 0;
+    let timeLeft = 25;
+    let timer;
+    let currentRound;
+    let preloadedImages = { real: [], fake: [] };
+    const totalImages = 100;
+
+    // Start preloading images immediately
+    preloadImages();
+
+    // Load highscore from localStorage
+    let highscore = localStorage.getItem('highscore') || 0;
+    highscoreElement.textContent = highscore;
+
+    function preloadImages(count = 20) {
+      const uniqueIndexes = new Set();
+      for (let i = 1; i <= count; i++) {
+        let index = Math.floor(Math.random() * totalImages) + 1;
+        while (uniqueIndexes.has(index)) {
+          index = Math.floor(Math.random() * totalImages) + 1;
+        }
+        uniqueIndexes.add(index);
+        const paddedIndex = index.toString().padStart(2, '0');
+
+        const realImg = new Image();
+        realImg.src = `insects/r/${paddedIndex}.png`;
+        preloadedImages.real.push(realImg);
+
+        const fakeImg = new Image();
+        fakeImg.src = `insects/f/${paddedIndex}.png`;
+        preloadedImages.fake.push(fakeImg);
+      }
+    }
+
+    function preloadAdditionalImages(count = 5) {
+      const realCount = Math.max(0, count - preloadedImages.real.length);
+      const fakeCount = Math.max(0, count - preloadedImages.fake.length);
+      if (realCount > 0 || fakeCount > 0) {
+        preloadImages(Math.max(realCount, fakeCount));
+      }
+    }
+
+    function getRandomImage(array) {
+      if (array.length <= 5) {
+        preloadAdditionalImages();
+      }
+      const randomIndex = Math.floor(Math.random() * array.length);
+      return array.splice(randomIndex, 1)[0];
+    }
+
+    function startGame() {
+      score = 0;
+      timeLeft = 25;
+      updateUI();
+      startOverlay.classList.add('hidden');
+      preloadAdditionalImages(); // Ensure we have enough images
+      startRound();
+      startTimer();
+    }
+
+    function startRound() {
+      preloadAdditionalImages();
+      const realImage = getRandomImage(preloadedImages.real);
+      const fakeImage = getRandomImage(preloadedImages.fake);
+  
+      if (Math.random() < 0.5) {
+        image1.querySelector('img').src = realImage.src;
+        image2.querySelector('img').src = fakeImage.src;
+        currentRound = 2;
+      } else {
+        image1.querySelector('img').src = fakeImage.src;
+        image2.querySelector('img').src = realImage.src;
+        currentRound = 1;
+      }
+    }
+
+    function startTimer() {
+      timer = setInterval(() => {
+        timeLeft--;
+        updateUI();
+        if (timeLeft === 3) {
+          document.getElementById('countdown-sound').play();
+        }
+        if (timeLeft <= 0) {
+          endGame('timeout');
+        }
+      }, 1000);
+    }
+
+    function updateUI() {
+      timeLeftElement.textContent = timeLeft;
+      scoreElement.textContent = score;
+    }
+
+    function calculatePerformancePercentage(score) {
+      const topScore = 30;
+      const percentage = Math.min(100, Math.max(0, (score / topScore) * 100));
+      return Math.round(percentage);
+    }
+
+    function endGame(reason) {
+      clearInterval(timer);
+      document.getElementById('countdown-sound').pause();
+      document.getElementById('countdown-sound').currentTime = 0;
+      const elapsedTime = 25 - timeLeft;
+      finalScoreElement.textContent = score;
+      gameOverMessageElement.textContent = `You found ${score} fake insect${score !== 1 ? 's' : ''} in ${elapsedTime} second${elapsedTime !== 1 ? 's' : ''}.`;
+      const gameOverReasonElement = document.getElementById('game-over-reason');
+      if (reason === 'timeout') {
+        gameOverReasonElement.textContent = "Time's up!";
+      } else {
+        gameOverReasonElement.textContent = "You clicked a real insect!";
+      }
+      const performancePercentage = calculatePerformancePercentage(score);
+      document.getElementById('performance-percentage').textContent = `You've outperformed ${performancePercentage}% of players.`;
+      // Update highscore if needed
+      if (score > highscore) {
+        highscore = score;
+        localStorage.setItem('highscore', highscore);
+        highscoreElement.textContent = highscore;
+      }
+      gameOverOverlay.classList.remove('hidden');
+    }
+
+    function handleImageClick(imageNumber) {
+      if (imageNumber === currentRound) {
+        const coinFlipSound = document.getElementById('coin-flip-sound').cloneNode();
+        coinFlipSound.play();
+        score++;
+        updateUI();
+        startRound();
+      } else {
+        const wiggleSound = document.getElementById('wiggle-sound').cloneNode();
+        wiggleSound.play();
+        endGame('wrong-click');
+      }
+    }
+
+    startButton.addEventListener('click', startGame);
+    tryAgainButton.addEventListener('click', () => {
+      gameOverOverlay.classList.add('hidden');
+      preloadAdditionalImages(); // Preload images before restarting
+      startGame();
+    });
+
+    image1.addEventListener('click', () => handleImageClick(1));
+    image2.addEventListener('click', () => handleImageClick(2));
+
+    // Function to hide images with no src
+    function hideImagesWithNoSrc() {
+      const images = document.querySelectorAll('.hidden-if-no-src');
+      images.forEach(img => {
+        if (!img.src || img.src === window.location.href) {
+          img.style.display = 'none';
+        } else {
+          img.style.display = 'block';
+        }
+      });
+    }
+
+    // Call the function when images are loaded or when their src changes
+    const observer = new MutationObserver(hideImagesWithNoSrc);
+    document.querySelectorAll('.hidden-if-no-src').forEach(img => {
+      observer.observe(img, { attributes: true, attributeFilter: ['src'] });
+      img.addEventListener('load', hideImagesWithNoSrc);
+      img.addEventListener('error', hideImagesWithNoSrc);
+    });
+
+    // Initial call to hide images with no src
+    hideImagesWithNoSrc();
+  </script>
+</html>

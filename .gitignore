@@ -1,0 +1,6 @@
+.aider*
+node_modules
+env.local
+**/.DS_Store
+server.mjs
+.env
